@@ -429,14 +429,14 @@ def primary_list(s, p):
 def primary_type_params(s, p):
     return Node('DATATAG', p[0], p[1])
 
-@pg.production('primary : datatype-name strlit')
+@pg.production('primary : datatype-name datatype-value')
 def primary_typed_string(s, p):
     literal_type = [] if p[0] == 'token' else [Node('LITERAL_TYPE', p[0])]
-    return Node('LITERAL', p[1].value, literal_type)
+    return Node('LITERAL', p[1], literal_type)
 
-@pg.production('primary : strlit')
-def primary_literal(s, p): # from datatypeValue
-    return Node('LITERAL', p[0].value)
+@pg.production('primary : datatype-value')
+def primary_literal(s, p):
+    return Node('LITERAL', p[0])
 
 @pg.production('primary : EMPTY')
 def primary_empty(s, p):
@@ -496,6 +496,10 @@ def data_except(s, p):
 @pg.production('datatype-name : STRING')
 @pg.production('datatype-name : TOKEN')
 def datatype_name(s, p):
+    return p[0].value
+
+@pg.production('datatype-value : strlit')
+def datatype_value(s, p):
     return p[0].value
 
 @pg.production('opt-params : ')
@@ -777,7 +781,7 @@ def id_kw_quoted_identifier(s, p):
 
 # Appendix A.1 (Syntax): literal.
 @pg.production('strlit : LITERAL')
-def strlit_literal(s, p): # from datatypeValue
+def strlit_literal(s, p):
     return p[0]
 
 @pg.production('strlit : strlit TILDE strlit')
