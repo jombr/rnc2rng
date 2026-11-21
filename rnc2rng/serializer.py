@@ -218,11 +218,11 @@ class XMLSerializer(object):
                 self.visit(x.value)
                 self.write('</grammar>')
             elif x.type in set([MAYBE, SOME, ANY]):
-                self.write('<%s>' % QUANTS[x.type])
+                self.write('<%s%s>' % (QUANTS[x.type], attribs))
                 self.visit(x.value)
                 self.write('</%s>' % QUANTS[x.type])
             elif x.type in set([INTERLEAVE, CHOICE, MIXED, LIST, DIV]):
-                self.write('<%s>' % x.type.lower())
+                self.write('<%s%s>' % (x.type.lower(), attribs))
                 self.visit(x.value)
                 self.write('</%s>' % x.type.lower())
             elif x.type == EXCEPT:
@@ -323,20 +323,22 @@ class XMLSerializer(object):
                 if len(x.value) == 1 and x.value[0].type != SEQ:
                     self.visit(x.value, indent=False)
                 else:
-                    self.write('<%s>' % x.type.lower())
+                    self.write('<%s%s>' % (x.type.lower(), attribs))
                     self.visit(x.value)
                     self.write('</%s>' % x.type.lower())
             elif x.type == NOT_ALLOWED:
-                self.write('<notAllowed/>')
+                self.write('<notAllowed%s/>' % attribs)
+                self.visit(x.value, indent=False)
             elif x.type in set([TEXT, EMPTY]):
-                self.write('<%s/>' % x.type.lower())
+                self.write('<%s%s/>' % (x.type.lower(), attribs))
+                self.visit(x.value, indent=False)
             elif x.type == SEQ:
                 self.visit(x.value, indent=False)
             elif x.type == DATATAG:
-                if not x.value: # no parameters
-                    self.write('<data%s/>' % self.type_attrs(x.name))
+                if not x.value:
+                    self.write('<data%s%s/>' % (self.type_attrs(x.name), attribs))
                 else:
-                    self.write('<data%s>' % self.type_attrs(x.name))
+                    self.write('<data%s%s>' % (self.type_attrs(x.name), attribs))
                     self.visit(x.value)
                     self.write('</data>')
             elif x.type == PARAM:

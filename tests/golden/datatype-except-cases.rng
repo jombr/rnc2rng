@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:a="urn:annotation"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element>
+      <name ns="">root</name>
+      <ref name="annotated"/>
+      <ref name="grouped"/>
+      <ref name="repeated"/>
+      <ref name="annotated-choice"/>
+      <ref name="annotated-empty-group"/>
+      <ref name="annotated-repetition"/>
+      <ref name="annotated-exception-group"/>
+      <ref name="annotated-empty"/>
+      <ref name="builtin-string"/>
+      <ref name="builtin-token"/>
+      <ref name="custom-library"/>
+    </element>
+  </start>
+  <define name="annotated">
+    <data type="string" a:note="datatype">
+      <a:documentation>Description</a:documentation>
+      <param name="pattern">[a-z]+</param>
+      <except>
+        <value a:note="value">reserved</value>
+      </except>
+    </data>
+  </define>
+  <define name="grouped">
+    <choice>
+      <data type="token">
+        <except>
+          <choice>
+            <value>x</value>
+            <value>y</value>
+          </choice>
+        </except>
+      </data>
+      <value>ok</value>
+    </choice>
+  </define>
+  <define name="repeated">
+    <zeroOrMore>
+      <data type="token">
+        <except>
+          <value>x</value>
+        </except>
+      </data>
+    </zeroOrMore>
+  </define>
+  <define name="annotated-choice">
+    <data type="token" datatypeLibrary="">
+      <except>
+        <choice a:note="excluded">
+          <value>x</value>
+          <value>y</value>
+        </choice>
+      </except>
+    </data>
+  </define>
+  <define name="annotated-empty-group">
+    <data type="token" datatypeLibrary="">
+      <except>
+        <group>
+          <a:note>excluded</a:note>
+          <empty/>
+        </group>
+      </except>
+    </data>
+  </define>
+  <define name="annotated-repetition">
+    <data type="token" datatypeLibrary="">
+      <except>
+        <zeroOrMore a:note="repeated">
+          <value>x</value>
+        </zeroOrMore>
+      </except>
+    </data>
+  </define>
+  <define name="annotated-exception-group">
+    <group a:note="group">
+      <data type="token" datatypeLibrary="">
+        <except>
+          <value>x</value>
+        </except>
+      </data>
+    </group>
+  </define>
+  <define name="annotated-empty">
+    <data type="token" datatypeLibrary="">
+      <except>
+        <empty/>
+        <a:note>excluded</a:note>
+      </except>
+    </data>
+  </define>
+  <define name="builtin-string">
+    <data type="string" datatypeLibrary="">
+      <except>
+        <value>reserved</value>
+      </except>
+    </data>
+  </define>
+  <define name="builtin-token">
+    <data type="token" datatypeLibrary="">
+      <except>
+        <value>reserved</value>
+      </except>
+    </data>
+  </define>
+  <define name="custom-library">
+    <data type="example" datatypeLibrary="urn:custom">
+      <except>
+        <value>reserved</value>
+      </except>
+    </data>
+  </define>
+</grammar>

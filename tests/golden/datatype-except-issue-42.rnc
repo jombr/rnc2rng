@@ -1,0 +1,4 @@
+start = element root {
+  attribute Algorithm { xsd:anyURI - excluded }
+}
+excluded = "urn:reserved"

@@ -343,6 +343,10 @@ def pattern_seq(s, p):
 def pattern_interleave(s, p):
     return [p[0]]
 
+@pg.production('pattern : lead-annotated-data-except')
+def pattern_data_except(s, p):
+    return [p[0]]
+
 @pg.production('particle-choice : particle PIPE particle')
 def particle_choice_single(s, p):
     return Node('CHOICE', None, [p[0], p[2]])
@@ -386,8 +390,22 @@ def particle_some(s, p):
 def particle_maybe(s, p):
     return Node('MAYBE', None, [p[0]])
 
-@pg.production('annotated-primary : annotations primary')
-def annotated_primary_annotated(s, p):
+@pg.production('annotated-primary : lead-annotated-primary')
+def annotated_primary(s, p):
+    return p[0]
+
+@pg.production('lead-annotated-data-except : annotations data-except')
+def lead_annotated_data_except(s, p):
+    p[1].value = p[0] + p[1].value
+    return p[1]
+
+@pg.production('lead-annotated-primary : annotations primary')
+def lead_annotated_primary(s, p):
+    # A.1 applies annotations to the grouped choice, interleave or repetition.
+    if (p[0] and p[1].type == 'GROUP' and
+            p[1].value[0].type in ('CHOICE', 'INTERLEAVE', 'ANY', 'SOME', 'MAYBE')):
+        p[1].value[0].value = p[0] + p[1].value[0].value
+        return p[1]
     p[1].value = p[0] + p[1].value
     return p[1]
 
@@ -407,41 +425,18 @@ def primary_mixed(s, p):
 def primary_list(s, p):
     return Node('LIST', None, p[2])
 
-@pg.production('primary : CNAME')
-def primary_cname(s, p):
-    return Node('DATATAG', p[0].value)
-
-@pg.production('primary : CNAME LBRACE params RBRACE')
+@pg.production('primary : datatype-name opt-params')
 def primary_type_params(s, p):
-    return Node('DATATAG', p[0].value, p[2])
+    return Node('DATATAG', p[0], p[1])
 
-@pg.production('primary : STRING')
-def primary_string(s, p):
-    return Node('DATATAG', 'string')
-
-@pg.production('primary : STRING LBRACE params RBRACE')
-def primary_string_parametrized(s, p):
-    return Node('DATATAG', 'string', p[2])
-
-@pg.production('primary : TOKEN')
-def primary_text(s, p):
-    return Node('DATATAG', 'token')
-
-@pg.production('primary : CNAME strlit')
-def primary_ctyped_string(s, p):
-    return Node('LITERAL', p[1].value, [Node('LITERAL_TYPE', p[0].value)])
-
-@pg.production('primary : STRING strlit')
+@pg.production('primary : datatype-name datatype-value')
 def primary_typed_string(s, p):
-    return Node('LITERAL', p[1].value, [Node('LITERAL_TYPE', 'string')])
+    literal_type = [] if p[0] == 'token' else [Node('LITERAL_TYPE', p[0])]
+    return Node('LITERAL', p[1], literal_type)
 
-@pg.production('primary : TOKEN strlit')
-def primary_text(s, p):
-    return Node('LITERAL', p[1].value) # the default type is token, so no LITERAL_TYPE
-
-@pg.production('primary : strlit')
-def primary_literal(s, p): # from datatypeValue
-    return Node('LITERAL', p[0].value)
+@pg.production('primary : datatype-value')
+def primary_literal(s, p):
+    return Node('LITERAL', p[0])
 
 @pg.production('primary : EMPTY')
 def primary_empty(s, p):
@@ -493,6 +488,28 @@ def primary_external(s, p):
 def annotated_primary_group(s, p):
     return Node('GROUP', None, p[1])
 
+@pg.production('data-except : datatype-name opt-params MINUS lead-annotated-primary')
+def data_except(s, p):
+    return Node('DATATAG', p[0], p[1] + [Node('EXCEPT', None, [p[3]])])
+
+@pg.production('datatype-name : CNAME')
+@pg.production('datatype-name : STRING')
+@pg.production('datatype-name : TOKEN')
+def datatype_name(s, p):
+    return p[0].value
+
+@pg.production('datatype-value : strlit')
+def datatype_value(s, p):
+    return p[0].value
+
+@pg.production('opt-params : ')
+def opt_params_none(s, p):
+    return []
+
+@pg.production('opt-params : LBRACE params RBRACE')
+def opt_params(s, p):
+    return p[1]
+
 # Parser-specific productions supporting the primary alternatives above.
 @pg.production('element-primary : ELEMENT name-class LBRACE pattern RBRACE')
 def element_primary(s, p):
@@ -504,7 +521,7 @@ def element_primary(s, p):
 def grammar(s, p):
     return Node('GRAMMAR', None, p[2])
 
-# These rules provide the datatype parameters used by primary alternatives.
+# Datatype parameters are shared by primary and data-except.
 @pg.production('params : ')
 def params_empty(s, p):
     return []
@@ -764,7 +781,7 @@ def id_kw_quoted_identifier(s, p):
 
 # Appendix A.1 (Syntax): literal.
 @pg.production('strlit : LITERAL')
-def strlit_literal(s, p): # from datatypeValue
+def strlit_literal(s, p):
     return p[0]
 
 @pg.production('strlit : strlit TILDE strlit')
