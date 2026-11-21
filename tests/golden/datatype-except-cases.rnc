@@ -1,0 +1,30 @@
+namespace a = "urn:annotation"
+datatypes custom = "urn:custom"
+
+start = element root {
+  annotated,
+  grouped,
+  repeated,
+  annotated-choice,
+  annotated-empty-group,
+  annotated-repetition,
+  annotated-exception-group,
+  annotated-empty,
+  builtin-string,
+  builtin-token,
+  custom-library
+}
+
+annotated =
+  [a:note = "datatype" a:documentation ["Description"]]
+  xsd:string { pattern = "[a-z]+" } - [a:note = "value"] "reserved"
+grouped = (xsd:token - ("x" | "y")) | "ok"
+repeated = (xsd:token - "x")*
+annotated-choice = token - [a:note = "excluded"] ("x" | "y")
+annotated-empty-group = token - [a:note ["excluded"]] (empty)
+annotated-repetition = token - [a:note = "repeated"] ("x"*)
+annotated-exception-group = [a:note = "group"] (token - "x")
+annotated-empty = token - [a:note ["excluded"]] empty
+builtin-string = string {} - "reserved"
+builtin-token = token {} - "reserved"
+custom-library = custom:example - "reserved"

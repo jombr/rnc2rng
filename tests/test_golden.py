@@ -50,11 +50,16 @@ class TestSuite(unittest.TestCase):
             rnc2rng.loads('external "child.rnc" inherit = missing\n')
 
     def test_empty_datatype_parameters(self):
-        for datatype in ("string", "xsd:string"):
+        for datatype in ("string", "token", "xsd:string"):
             with self.subTest(datatype=datatype):
                 plain = rnc2rng.dumps(rnc2rng.loads(f"element root {{ {datatype} }}"))
                 empty = rnc2rng.dumps(rnc2rng.loads(f"element root {{ {datatype} {{}} }}"))
                 self.assertEqual(plain, empty)
+
+    def test_datatype_exception_requires_grouping(self):
+        for pattern in ('xsd:token - "x" | "y"', 'xsd:token - "x"*'):
+            with self.subTest(pattern=pattern), self.assertRaises(ParseError):
+                rnc2rng.loads(f"element root {{ {pattern} }}")
 
     # synthesize a test that reads its input from a URL
     def test_urlinput(self):
