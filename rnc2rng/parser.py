@@ -407,37 +407,39 @@ def primary_mixed(s, p):
 def primary_list(s, p):
     return Node('LIST', None, p[2])
 
-@pg.production('primary : CNAME')
-def primary_cname(s, p):
-    return Node('DATATAG', p[0].value)
-
-@pg.production('primary : CNAME LBRACE params RBRACE')
+@pg.production('primary : parameterized-datatype-name opt-params')
 def primary_type_params(s, p):
-    return Node('DATATAG', p[0].value, p[2])
-
-@pg.production('primary : STRING')
-def primary_string(s, p):
-    return Node('DATATAG', 'string')
-
-@pg.production('primary : STRING LBRACE params RBRACE')
-def primary_string_parametrized(s, p):
-    return Node('DATATAG', 'string', p[2])
+    return Node('DATATAG', p[0], p[1])
 
 @pg.production('primary : TOKEN')
-def primary_text(s, p):
-    return Node('DATATAG', 'token')
+def primary_token(s, p):
+    return Node('DATATAG', p[0].value)
 
-@pg.production('primary : CNAME strlit')
-def primary_ctyped_string(s, p):
-    return Node('LITERAL', p[1].value, [Node('LITERAL_TYPE', p[0].value)])
-
-@pg.production('primary : STRING strlit')
+@pg.production('primary : datatype-name strlit')
 def primary_typed_string(s, p):
-    return Node('LITERAL', p[1].value, [Node('LITERAL_TYPE', 'string')])
+    literal_type = [] if p[0] == 'token' else [Node('LITERAL_TYPE', p[0])]
+    return Node('LITERAL', p[1].value, literal_type)
 
-@pg.production('primary : TOKEN strlit')
-def primary_text(s, p):
-    return Node('LITERAL', p[1].value) # the default type is token, so no LITERAL_TYPE
+@pg.production('datatype-name : parameterized-datatype-name')
+def datatype_name_parameterized(s, p):
+    return p[0]
+
+@pg.production('datatype-name : TOKEN')
+def datatype_name_token(s, p):
+    return p[0].value
+
+@pg.production('parameterized-datatype-name : CNAME')
+@pg.production('parameterized-datatype-name : STRING')
+def parameterized_datatype_name(s, p):
+    return p[0].value
+
+@pg.production('opt-params : ')
+def opt_params_none(s, p):
+    return []
+
+@pg.production('opt-params : LBRACE params RBRACE')
+def opt_params(s, p):
+    return p[1]
 
 @pg.production('primary : strlit')
 def primary_literal(s, p): # from datatypeValue
