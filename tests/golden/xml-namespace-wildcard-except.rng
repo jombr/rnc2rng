@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:a="urn:annotation"
+         xmlns:ex="urn:example"
+         xmlns:xml="http://www.w3.org/XML/1998/namespace">
+  <start>
+    <element>
+      <name ns="">root</name>
+      <zeroOrMore>
+        <attribute>
+          <nsName ns="http://www.w3.org/XML/1998/namespace">
+            <except>
+              <name ns="http://www.w3.org/XML/1998/namespace">lang</name>
+            </except>
+          </nsName>
+          <text/>
+        </attribute>
+      </zeroOrMore>
+      <zeroOrMore>
+        <attribute>
+          <nsName ns="urn:example"/>
+          <text/>
+        </attribute>
+      </zeroOrMore>
+      <zeroOrMore>
+        <attribute>
+          <nsName ns="urn:annotation"/>
+          <text/>
+        </attribute>
+      </zeroOrMore>
+    </element>
+  </start>
+</grammar>

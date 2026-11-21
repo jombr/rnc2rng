@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start>
+    <element>
+      <name ns="">root</name>
+      <zeroOrMore>
+        <attribute>
+          <nsName ns="http://www.w3.org/XML/1998/namespace"/>
+          <text/>
+        </attribute>
+      </zeroOrMore>
+      <zeroOrMore>
+        <element>
+          <nsName ns="http://www.w3.org/XML/1998/namespace"/>
+          <empty/>
+        </element>
+      </zeroOrMore>
+    </element>
+  </start>
+</grammar>

@@ -1,0 +1,8 @@
+namespace a = "urn:annotation"
+namespace ex = "urn:example"
+
+start = element root {
+  attribute (xml:* - xml:lang) { text }*,
+  attribute ex:* { text }*,
+  attribute a:* { text }*
+}

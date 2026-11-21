@@ -49,6 +49,15 @@ class TestSuite(unittest.TestCase):
         with self.assertRaisesRegex(ParseError, "Unknown namespace prefix"):
             rnc2rng.loads('external "child.rnc" inherit = missing\n')
 
+    def test_unknown_namespace_wildcard_prefix(self):
+        for prefix in ("missing", "a"):
+            for name_class in (f"{prefix}:*", f"({prefix}:* - {prefix}:name)"):
+                with self.subTest(name_class=name_class):
+                    source = f"start = element root {{ attribute {name_class} {{ text }}* }}"
+                    with self.assertRaises(KeyError) as error:
+                        rnc2rng.dumps(rnc2rng.loads(source))
+                    self.assertEqual(error.exception.args, (prefix,))
+
     def test_empty_datatype_parameters(self):
         for datatype in ("string", "token", "xsd:string"):
             with self.subTest(datatype=datatype):

@@ -51,6 +51,11 @@ class XMLSerializer(object):
             self.ns[ns] = NAMESPACES[ns]
         return self.ns[ns]
 
+    def wildcard_namespace(self, prefix):
+        if prefix == 'xml' and prefix not in self.ns:
+            return NAMESPACES['xml']
+        return self.ns[prefix]
+
     def namespace_declaration(self, prefix, uri):
         if prefix == 'xml' or self.global_ns.get(prefix) == uri:
             return ''
@@ -234,13 +239,13 @@ class XMLSerializer(object):
                     if x.name == '*':
                         self.write('<anyName/>')
                     else:
-                        uri = self.ns[x.name.split(':', 1)[0]]
+                        uri = self.wildcard_namespace(x.name.split(':', 1)[0])
                         self.write('<nsName ns="%s"/>' % uri)
                 elif x.value:
                     if x.name == '*':
                         self.write('<anyName>')
                     else:
-                        uri = self.ns[x.name.split(':', 1)[0]]
+                        uri = self.wildcard_namespace(x.name.split(':', 1)[0])
                         self.write('<nsName ns="%s">' % uri)
                     self.visit(x.value, ctx=ctx)
                     if x.name == '*':
