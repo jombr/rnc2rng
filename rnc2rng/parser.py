@@ -69,11 +69,62 @@ def _normalize_newlines(source):
     source.text, source.offsets = ''.join(chars), offsets
 
 
+# XML 1.0 section 2.2, Char production: NUL (#x0) is excluded.
+def _xml_char(code):
+    return (code in (0x9, 0xA, 0xD) or 0x20 <= code <= 0xD7FF
+            or 0xE000 <= code <= 0xFFFD or 0x10000 <= code <= 0x10FFFF)
+
+
+# Appendix A.2.4: escape interpretation, without rescanning replacements.
+def _interpret_escapes(source):
+    chars, offsets = [], []
+    text = source.text
+    i = 0
+    while i < len(text):
+        start = i
+        # escapeSequence returns x, the Number returned by hexNumber.
+        # escapeOpen ::= "\" xs "{"
+        # xs ::= "x" | "x" xs
+        if text[i] == '\\':
+            j = i + 1
+            while j < len(text) and text[j] == 'x':
+                j += 1
+            if j > i + 1 and j < len(text) and text[j] == '{':
+                j += 1
+                digits = j
+                code = 0
+                # hexDigit ::= [0-9a-fA-F]
+                # hexNumber ::= hexDigit | hexNumber x hexDigit y
+                #     { (x * 16) + y }
+                while j < len(text) and text[j] in '0123456789abcdefABCDEF':
+                    code = code * 16 + int(text[j], 16)
+                    if code > 0x10FFFF:
+                        source.error(source.offsets[j], 'Invalid XML character in escape')
+                    j += 1
+                # escapeClose ::= "}"
+                # A matched escapeOpen without a full escapeSequence is an error.
+                if j == digits or j >= len(text) or text[j] != '}':
+                    offset = source.offsets[j] if j < len(text) else len(source.original)
+                    source.error(offset, 'Malformed Unicode escape')
+                # Require the Number to be an XML Char.
+                if not _xml_char(code):
+                    source.error(source.offsets[j], 'Invalid XML character in escape')
+                chars.append(chr(code))
+                offsets.append(source.offsets[start])
+                i = j + 1
+                continue
+        chars.append(text[i])
+        offsets.append(source.offsets[i])
+        i += 1
+    source.text, source.offsets = ''.join(chars), offsets
+
+
 # Appendix A.2.2-2.4: preprocessing before tokenization.
 def _preprocess_source(src, fn=None):
     source = Source(src, fn)
     _strip_bom(source)
     _normalize_newlines(source)
+    _interpret_escapes(source)
     return source
 
 # Section 2.5: tokenization.
