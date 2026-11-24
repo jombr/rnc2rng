@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+         xmlns:ex="urn:example"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <a:documentation>escaped documentation</a:documentation>
+    <element>
+      <name ns="">root</name>
+      <value ex:note="line&#xA;tab&#x9;return&#xD;" type="string">a\x{61}</value>
+    </element>
+  </start>
+</grammar>

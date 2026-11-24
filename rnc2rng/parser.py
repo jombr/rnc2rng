@@ -1,8 +1,12 @@
 from codecs import BOM_UTF16_BE, BOM_UTF16_LE
 from urllib.request import urlopen
 from urllib.parse import urljoin, urlparse
+from bisect import bisect_right
+import re
 
 import rply, sys, os
+from rply.errors import LexingError
+from rply.token import SourcePosition
 
 # Appendix A.2: lexical structure.
 
@@ -12,8 +16,116 @@ def _decode_source(data):
     return data.decode('utf-16' if bom else 'utf-8')
 
 
-# Sections 2.3-2.4 (newline normalization and escape interpretation) are
-# not currently implemented as separate preprocessing stages.
+# A physical newline is distinct from a character produced by an escape.
+# NUL cannot occur in an XML character, so it can represent the marker.
+NEWLINE_MARKER = '\0'
+
+
+class Source(object):
+    def __init__(self, src, fn=None):
+        self.original = src
+        self.fn = fn
+        self.lines = re.split(r'\r\n|\r|\n', src)
+        if self.lines[0].startswith('\ufeff'):
+            self.lines[0] = self.lines[0][1:]
+        first = 1 if src.startswith('\ufeff') else 0
+        self.line_starts = [first] + [m.end() for m in re.finditer(r'\r\n|\r|\n', src)]
+        self.text = src
+        self.offsets = list(range(len(src)))
+
+    def position(self, offset):
+        line = bisect_right(self.line_starts, offset) - 1
+        return SourcePosition(offset, line + 1, offset - self.line_starts[line] + 1)
+
+    def error(self, offset, message):
+        pos = self.position(offset)
+        raise ParseError(None, self.fn, pos.lineno - 1, pos.colno - 1,
+                         self.lines[pos.lineno - 1], message)
+
+
+# Appendix A.2.2: BOM stripping.
+def _strip_bom(source):
+    if source.text.startswith('\ufeff'):
+        source.text = source.text[1:]
+        source.offsets = source.offsets[1:]
+
+
+# Appendix A.2.3: physical newline normalization.
+def _normalize_newlines(source):
+    chars, offsets = [], []
+    i = 0
+    while i < len(source.text):
+        c = source.text[i]
+        if c == NEWLINE_MARKER:
+            source.error(source.offsets[i], 'Invalid XML character')
+        offsets.append(source.offsets[i])
+        if c == '\r' or c == '\n':
+            chars.append(NEWLINE_MARKER)
+            if c == '\r' and i + 1 < len(source.text) and source.text[i + 1] == '\n':
+                i += 1
+        else:
+            chars.append(c)
+        i += 1
+    source.text, source.offsets = ''.join(chars), offsets
+
+
+# XML 1.0 section 2.2, Char production: NUL (#x0) is excluded.
+def _xml_char(code):
+    return (code in (0x9, 0xA, 0xD) or 0x20 <= code <= 0xD7FF
+            or 0xE000 <= code <= 0xFFFD or 0x10000 <= code <= 0x10FFFF)
+
+
+# Appendix A.2.4: escape interpretation, without rescanning replacements.
+def _interpret_escapes(source):
+    chars, offsets = [], []
+    text = source.text
+    i = 0
+    while i < len(text):
+        start = i
+        # escapeSequence returns x, the Number returned by hexNumber.
+        # escapeOpen ::= "\" xs "{"
+        # xs ::= "x" | "x" xs
+        if text[i] == '\\':
+            j = i + 1
+            while j < len(text) and text[j] == 'x':
+                j += 1
+            if j > i + 1 and j < len(text) and text[j] == '{':
+                j += 1
+                digits = j
+                code = 0
+                # hexDigit ::= [0-9a-fA-F]
+                # hexNumber ::= hexDigit | hexNumber x hexDigit y
+                #     { (x * 16) + y }
+                while j < len(text) and text[j] in '0123456789abcdefABCDEF':
+                    code = code * 16 + int(text[j], 16)
+                    if code > 0x10FFFF:
+                        source.error(source.offsets[j], 'Invalid XML character in escape')
+                    j += 1
+                # escapeClose ::= "}"
+                # A matched escapeOpen without a full escapeSequence is an error.
+                if j == digits or j >= len(text) or text[j] != '}':
+                    offset = source.offsets[j] if j < len(text) else len(source.original)
+                    source.error(offset, 'Malformed Unicode escape')
+                # Require the Number to be an XML Char.
+                if not _xml_char(code):
+                    source.error(source.offsets[j], 'Invalid XML character in escape')
+                chars.append(chr(code))
+                offsets.append(source.offsets[start])
+                i = j + 1
+                continue
+        chars.append(text[i])
+        offsets.append(source.offsets[i])
+        i += 1
+    source.text, source.offsets = ''.join(chars), offsets
+
+
+# Appendix A.2.2-2.4: preprocessing before tokenization.
+def _preprocess_source(src, fn=None):
+    source = Source(src, fn)
+    _strip_bom(source)
+    _normalize_newlines(source)
+    _interpret_escapes(source)
+    return source
 
 # Section 2.5: tokenization.
 KEYWORDS = (
@@ -61,25 +173,31 @@ def lexer():
     lg.add('CNAME', r'%s:(%s|\*)' % (NCNAME, NCNAME))
     lg.add('QID', r'\\%s' % NCNAME)
     lg.add('ID', NCNAME)
-    lg.add('LITERAL', r'".*?"')
-    lg.add('DOCUMENTATION', r'##.*')
-    lg.add('COMMENT', r'#.*')
+    lg.add('LITERAL', r'"[^\x00"]*"')
+    lg.add('DOCUMENTATION', r'##[^\x00\n]*')
+    lg.add('COMMENT', r'#[^\x00\n]*')
     lg.add('TILDE', r'~')
-    lg.ignore(r'\s+')
+    lg.ignore(r'[^\S\r\x00]+|\x00+')
     return lg.build()
 
 LEXER = lexer()
 
 
-def lex(src):
-    for t in LEXER.lex(src):
-        if t.name == 'ID' and t.value in KEYWORDS:
-            t.name = t.value.upper()
-        elif t.name == 'LITERAL':
-            t.value = t.value[1:-1]
-        elif t.name == 'COMMENT':
-            continue
-        yield t
+def lex(src, fn=None):
+    source = _preprocess_source(src, fn)
+    try:
+        for t in LEXER.lex(source.text):
+            t.source_pos = source.position(source.offsets[t.source_pos.idx])
+            if t.name == 'ID' and t.value in KEYWORDS:
+                t.name = t.value.upper()
+            elif t.name == 'LITERAL':
+                t.value = t.value[1:-1]
+            elif t.name == 'COMMENT':
+                continue
+            yield t
+    except LexingError as exc:
+        offset = source.offsets[exc.source_pos.idx]
+        raise LexingError(exc.message, source.position(offset)) from exc
 
 # Parser-generator configuration and AST node types.
 pg = rply.ParserGenerator([
@@ -810,8 +928,6 @@ class ParseError(Exception):
 
 def _make_parse_error(s, t, message=None):
     ln = t.source_pos.lineno - 1
-    if t.value and t.value[0] == '\n':
-        ln -= 1
     col = t.source_pos.colno - 1
     line = s.lines[ln] if ln < len(s.lines) else ''
     return ParseError(t, s.fn, ln, col, line, message)
@@ -828,7 +944,9 @@ class State(object):
         self.path = os.getcwd()
         if fn is not None:
             self.path = os.path.dirname(os.path.abspath(fn)) if not is_url(fn) else fn
-        self.lines = src.splitlines()
+        self.lines = re.split(r'\r\n|\r|\n', src)
+        if self.lines[0].startswith('\ufeff'):
+            self.lines[0] = self.lines[0][1:]
         self.has_inherited_namespace = inherited_namespace is not None
         self.inherited_namespace = inherited_namespace or ''
         self.default_namespace = self.inherited_namespace
@@ -866,4 +984,4 @@ def parse(src=None, f=None, inherited_namespace=None):
     else:
         # Caller only gave source code, no filename.
         fn = None
-    return parser.parse(lex(src), state=State(fn, src, inherited_namespace))
+    return parser.parse(lex(src, fn), state=State(fn, src, inherited_namespace))

@@ -21,6 +21,19 @@ NAMESPACES = {
     'xml': 'http://www.w3.org/XML/1998/namespace',
 }
 
+
+# XML 1.0 section 2.11 normalizes literal CR to LF; use a character
+# reference to preserve CR produced by Compact Syntax Appendix A.2.4.
+def _escape_text(value):
+    return html.escape(value).replace('\r', '&#xD;')
+
+
+# XML 1.0 section 3.3.3 normalizes literal whitespace in attributes.
+# Character references preserve the values used by Appendix A.1.
+def _escape_attr(value):
+    return _escape_text(value).replace('\n', '&#xA;').replace('\t', '&#x9;')
+
+
 class XMLSerializer(object):
 
     def __init__(self, indent=None):
@@ -60,7 +73,7 @@ class XMLSerializer(object):
         if prefix == 'xml' or self.global_ns.get(prefix) == uri:
             return ''
         if self.root_depth:
-            return ' xmlns:%s="%s"' % (prefix, html.escape(uri))
+            return ' xmlns:%s="%s"' % (prefix, _escape_attr(uri))
         self.ns[prefix] = uri
         return ''
 
@@ -97,16 +110,16 @@ class XMLSerializer(object):
         prelude = ['<?xml version="1.0" encoding="UTF-8"?>']
         prelude.append('<grammar xmlns="http://relaxng.org/ns/structure/1.0"')
         if self.default and self.default != 'inherit':
-            prelude.append('         ns="%s"' % self.default)
+            prelude.append('         ns="%s"' % _escape_attr(self.default))
 
         self.visit(node.value)
         for ns, url in sorted(self.ns.items()):
             if url and url != 'inherit':
-                prelude.append('         xmlns:%s="%s"' % (ns, url))
+                prelude.append('         xmlns:%s="%s"' % (ns, _escape_attr(url)))
 
         # if xsd:* ever referenced, print it at the grammar level
         if 'xsd' in self.typelibs:
-            prelude.append('         datatypeLibrary="%s"' % self.typelibs['xsd'])
+            prelude.append('         datatypeLibrary="%s"' % _escape_attr(self.typelibs['xsd']))
 
         prelude[-1] = prelude[-1] + '>'
         self.write('</grammar>')
@@ -119,7 +132,7 @@ class XMLSerializer(object):
         for n in nodes:
             if not select(n):
                 continue
-            pairs.append((n.name, html.escape(n.value[0])))
+            pairs.append((n.name, _escape_attr(n.value[0])))
             if n.name is not None and ':' in n.name:
                 prefixes.add(n.name.split(':', 1)[0])
 
@@ -143,7 +156,7 @@ class XMLSerializer(object):
 
         attrs = ' type="%s"' % name
         if ns != TYPELIBS['xsd']:
-            attrs += ' datatypeLibrary="%s"' % ns # write all exceptions explicitly
+            attrs += ' datatypeLibrary="%s"' % _escape_attr(ns) # write all exceptions explicitly
         return attrs
 
     def map_schema_ref(self, uri):
@@ -240,13 +253,13 @@ class XMLSerializer(object):
                         self.write('<anyName/>')
                     else:
                         uri = self.wildcard_namespace(x.name.split(':', 1)[0])
-                        self.write('<nsName ns="%s"/>' % uri)
+                        self.write('<nsName ns="%s"/>' % _escape_attr(uri))
                 elif x.value:
                     if x.name == '*':
                         self.write('<anyName>')
                     else:
                         uri = self.wildcard_namespace(x.name.split(':', 1)[0])
-                        self.write('<nsName ns="%s">' % uri)
+                        self.write('<nsName ns="%s">' % _escape_attr(uri))
                     self.visit(x.value, ctx=ctx)
                     if x.name == '*':
                         self.write('</anyName>')
@@ -262,7 +275,7 @@ class XMLSerializer(object):
                     if ns == 'inherit':
                         self.write('<name>%s</name>' % name)
                     else:
-                        self.write('<name ns="%s">%s</name>' % (ns, name))
+                        self.write('<name ns="%s">%s</name>' % (_escape_attr(ns), name))
             elif x.type in set([REF, PARENT]):
                 bits = x.type.lower(), x.name, attribs
                 if not x.value: # no parameters
@@ -272,11 +285,11 @@ class XMLSerializer(object):
                     self.visit(x.value)
                     self.write('</%s>' % x.type.lower())
             elif x.type == EXTERNAL:
-                href = html.escape(self.map_schema_ref(x.name))
+                href = _escape_attr(self.map_schema_ref(x.name))
                 inherited_namespace = x.value[0]
                 ns_attr = ''
                 if inherited_namespace != 'inherit':
-                    ns_attr = ' ns="%s"' % html.escape(inherited_namespace)
+                    ns_attr = ' ns="%s"' % _escape_attr(inherited_namespace)
                 self.write('<externalRef href="%s"%s/>' % (href, ns_attr))
             elif x.type == LITERAL:
                 types = [n.name for n in x.value if isinstance(n, parser.Node) and n.type == LITERAL_TYPE]
@@ -284,7 +297,7 @@ class XMLSerializer(object):
                     assert len(types) == 1
                     attribs += self.type_attrs(types[0])
 
-                bits = attribs, html.escape(x.name)
+                bits = attribs, _escape_text(x.name)
 
                 self.write('<value%s>%s</value>' % bits)
                 self.visit(x.value, indent=False)
@@ -299,7 +312,7 @@ class XMLSerializer(object):
                 end = '/' if not (literals or rest) else ''
                 tail = ''
                 if literals and not rest:
-                    tail = html.escape(''.join(literals)) + '</%s>' % x.name
+                    tail = _escape_text(''.join(literals)) + '</%s>' % x.name
 
                 bits = x.name, attribs, end, tail
 
@@ -312,7 +325,7 @@ class XMLSerializer(object):
                         continue
                     elif n.type == LITERAL:
                         self.level += 1
-                        self.write(html.escape(n.name))
+                        self.write(_escape_text(n.name))
                         self.level -= 1
                     else:
                         self.visit([n])
@@ -323,7 +336,7 @@ class XMLSerializer(object):
                 xmlns_attr = self.documentation_namespace_declaration()
 
                 fmt = '<a:documentation%s>%s</a:documentation>'
-                self.write(fmt % (xmlns_attr, html.escape('\n'.join(x.value))))
+                self.write(fmt % (xmlns_attr, _escape_text('\n'.join(x.value))))
             elif x.type == GROUP:
                 if len(x.value) == 1 and x.value[0].type != SEQ:
                     self.visit(x.value, indent=False)
@@ -347,7 +360,7 @@ class XMLSerializer(object):
                     self.visit(x.value)
                     self.write('</data>')
             elif x.type == PARAM:
-                bits = x.name, html.escape(x.value[0])
+                bits = x.name, _escape_text(x.value[0])
                 self.write('<param name="%s">%s</param>' % bits)
             elif x.type == ELEM:
                 self.write('<element%s>' % attribs)

@@ -1,0 +1,6 @@
+namespace ex = "urn:\x{65}xample"
+## escaped \x{64}ocumentation
+start = \x{65}lement r\x{6f}ot {
+  [ex:note = "line\x{A}tab\x{9}return\x{D}"]
+  xsd:string "\xxx{61}\x{5C}x{61}"
+}
