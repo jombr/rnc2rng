@@ -35,6 +35,19 @@ class PreprocessingTests(unittest.TestCase):
         self.assertEqual((error.exception.source_pos.idx, error.exception.source_pos.lineno,
                           error.exception.source_pos.colno), (src.index('@'), 2, 3))
 
+    def test_original_location_after_comment_lines(self):
+        src = '# ignored\r\n' * 4 + 'start = element root {\r\n  @\r\n}'
+        with self.assertRaises(LexingError) as error:
+            rnc2rng.loads(src)
+        self.assertEqual((error.exception.source_pos.idx, error.exception.source_pos.lineno,
+                          error.exception.source_pos.colno), (src.index('@'), 6, 3))
+
+        src = '# ignored\r\n' * 4 + 'start = element root {\r\n  | empty\r\n}'
+        with self.assertRaises(parser.ParseError) as error:
+            rnc2rng.loads(src)
+        self.assertEqual(error.exception.location, (None, 5, 2))
+        self.assertEqual(error.exception.line, '  | empty')
+
     def test_escape_replacement_and_nonrecursive_scanning(self):
         source = parser._preprocess_source(
             r'\x{61} \xxx{6F} \x{1F600} \x{5C}x{61} \\x{61} \xhello \X{61}'

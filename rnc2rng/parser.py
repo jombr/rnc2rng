@@ -6,6 +6,7 @@ import re
 
 import rply, sys, os
 from rply.errors import LexingError
+from rply.lexer import LexerStream
 from rply.token import SourcePosition
 
 # Appendix A.2: lexical structure.
@@ -183,10 +184,17 @@ def lexer():
 LEXER = lexer()
 
 
+class _SourceMappedLexerStream(LexerStream):
+    def _update_pos(self, match):
+        # RPLY's line scan is quadratic here; lex() maps offsets afterward.
+        self.idx = match.end
+        return 1
+
+
 def lex(src, fn=None):
     source = _preprocess_source(src, fn)
     try:
-        for t in LEXER.lex(source.text):
+        for t in _SourceMappedLexerStream(LEXER, source.text):
             t.source_pos = source.position(source.offsets[t.source_pos.idx])
             if t.name == 'ID' and t.value in KEYWORDS:
                 t.name = t.value.upper()
