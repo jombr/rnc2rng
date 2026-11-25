@@ -78,8 +78,10 @@ def _xml_char(code):
 
 # Appendix A.2.4: escape interpretation, without rescanning replacements.
 def _interpret_escapes(source):
-    chars, offsets = [], []
     text = source.text
+    if '\\' not in text:
+        return
+    chars, offsets = [], []
     i = 0
     while i < len(text):
         start = i

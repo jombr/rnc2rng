@@ -55,6 +55,14 @@ class PreprocessingTests(unittest.TestCase):
         self.assertEqual(source.text, 'a o \U0001f600 \\x{61} \\a \\xhello \\X{61}')
         self.assertEqual(parser._preprocess_source(r'\x{A}\x{D}').text, '\n\r')
 
+    def test_escape_scanner_reuses_source_without_backslashes(self):
+        source = parser.Source('start = element root {\r\n  empty }')
+        parser._normalize_newlines(source)
+        text, offsets = source.text, source.offsets
+        parser._interpret_escapes(source)
+        self.assertIs(source.text, text)
+        self.assertIs(source.offsets, offsets)
+
     def test_malformed_and_invalid_escapes(self):
         for escape in (r'\x{}', r'\x{G}', r'\x{61', r'\x{0}',
                        r'\x{D800}', r'\x{FFFE}', r'\x{110000}'):
