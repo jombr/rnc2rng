@@ -1,5 +1,7 @@
 import rnc2rng
+import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from rnc2rng.parser import ParseError
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -69,6 +71,35 @@ class TestSuite(unittest.TestCase):
         for pattern in ('xsd:token - "x" | "y"', 'xsd:token - "x"*'):
             with self.subTest(pattern=pattern), self.assertRaises(ParseError):
                 rnc2rng.loads(f"element root {{ {pattern} }}")
+
+    def test_nested_grammar_retains_wrapper(self):
+        body = 'start = element root { empty }'
+        nested = rnc2rng.dumps(rnc2rng.loads('start = grammar { ' + body + ' }'))
+        root = ET.fromstring(nested)
+        ns = '{http://relaxng.org/ns/structure/1.0}'
+        self.assertIsNotNone(root.find(ns + 'start/' + ns + 'grammar/' + ns + 'start'))
+
+    def test_included_top_level_grammar(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            (path / 'child.rnc').write_text(
+                'namespace a = "urn:child"\n'
+                'grammar { a:note [ "child" ] start = element root { empty } }',
+                encoding='utf-8',
+            )
+            (path / 'parent.rnc').write_text(
+                'default namespace = "urn:parent"\n'
+                'namespace a = "urn:outer"\n'
+                'include "child.rnc"',
+                encoding='utf-8',
+            )
+            root = ET.fromstring(rnc2rng.dumps(rnc2rng.load(str(path / 'parent.rnc'))))
+        ns = '{http://relaxng.org/ns/structure/1.0}'
+        self.assertEqual([child.tag for child in root],
+                         ['{urn:child}note', ns + 'start'])
+        self.assertEqual(root.find('{urn:child}note').text, 'child')
+        name = root.find(ns + 'start/' + ns + 'element/' + ns + 'name')
+        self.assertEqual((name.text, name.get('ns')), ('root', 'urn:parent'))
 
     # synthesize a test that reads its input from a URL
     def test_urlinput(self):

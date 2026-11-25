@@ -112,7 +112,7 @@ class XMLSerializer(object):
         if self.default and self.default != 'inherit':
             prelude.append('         ns="%s"' % _escape_attr(self.default))
 
-        self.visit(node.value)
+        self.visit_schema_contents(node.value)
         for ns, url in sorted(self.ns.items()):
             if url and url != 'inherit':
                 prelude.append('         xmlns:%s="%s"' % (ns, _escape_attr(url)))
@@ -185,11 +185,21 @@ class XMLSerializer(object):
                         self.ns[n.name] = n.value[0]
                 elif n.type == NS:
                     self.ns[n.name] = n.value[0]
-            self.visit(root.value, indent=False)
+            self.visit_schema_contents(root.value, indent=False)
         finally:
             self.root_depth -= 1
             self.ns = outer_ns
             self.default = outer_default
+
+    def visit_schema_contents(self, nodes, indent=True):
+        # A schema-root grammar supplies members to the enclosing grammar.
+        contents = []
+        for node in nodes:
+            if isinstance(node, parser.Node) and node.type == GRAMMAR:
+                contents.extend(node.value)
+            else:
+                contents.append(node)
+        self.visit(contents, indent=indent)
 
     def visit(self, nodes, ctx=None, indent=True):
         '''Visiting a list of nodes, writes out the XML content to the internal
