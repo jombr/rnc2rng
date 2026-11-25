@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest.mock import patch
 
 import rnc2rng
 from rnc2rng import parser, rnctree
@@ -16,6 +17,22 @@ class PreprocessingTests(unittest.TestCase):
                          ['a', '\r', 'b', '\r', 'c', '\n'])
         pos = source.position(source.offsets[2])
         self.assertEqual((pos.lineno, pos.colno), (2, 1))
+
+    def test_packed_offsets_preserve_positions_across_widths(self):
+        src = '\ufeffa\r\n' + r'\x{62}' + '\r'
+        short_source = parser._preprocess_source(src)
+        with patch.object(parser, '_MAX_SHORT_OFFSET', 4):
+            self.assertEqual(parser.Source('abcde').offsets.typecode, 'I')
+            self.assertEqual(parser.Source('abcdef').offsets.typecode, 'Q')
+            wide_source = parser._preprocess_source(src)
+
+        for source, typecode in ((short_source, 'I'), (wide_source, 'Q')):
+            with self.subTest(typecode=typecode):
+                self.assertEqual(source.offsets.typecode, typecode)
+                self.assertEqual(source.text, 'a\0b\0')
+                self.assertEqual(list(source.offsets), [1, 2, 4, 10])
+                pos = source.position(source.offsets[2])
+                self.assertEqual((pos.idx, pos.lineno, pos.colno), (4, 2, 1))
 
     def test_physical_line_endings_and_bom(self):
         expected = rnc2rng.dumps(rnc2rng.loads('start = element root { empty }'))
@@ -35,12 +52,33 @@ class PreprocessingTests(unittest.TestCase):
         self.assertEqual((error.exception.source_pos.idx, error.exception.source_pos.lineno,
                           error.exception.source_pos.colno), (src.index('@'), 2, 3))
 
+    def test_original_location_after_comment_lines(self):
+        src = '# ignored\r\n' * 4 + 'start = element root {\r\n  @\r\n}'
+        with self.assertRaises(LexingError) as error:
+            rnc2rng.loads(src)
+        self.assertEqual((error.exception.source_pos.idx, error.exception.source_pos.lineno,
+                          error.exception.source_pos.colno), (src.index('@'), 6, 3))
+
+        src = '# ignored\r\n' * 4 + 'start = element root {\r\n  | empty\r\n}'
+        with self.assertRaises(parser.ParseError) as error:
+            rnc2rng.loads(src)
+        self.assertEqual(error.exception.location, (None, 5, 2))
+        self.assertEqual(error.exception.line, '  | empty')
+
     def test_escape_replacement_and_nonrecursive_scanning(self):
         source = parser._preprocess_source(
             r'\x{61} \xxx{6F} \x{1F600} \x{5C}x{61} \\x{61} \xhello \X{61}'
         )
         self.assertEqual(source.text, 'a o \U0001f600 \\x{61} \\a \\xhello \\X{61}')
         self.assertEqual(parser._preprocess_source(r'\x{A}\x{D}').text, '\n\r')
+
+    def test_escape_scanner_reuses_source_without_backslashes(self):
+        source = parser.Source('start = element root {\r\n  empty }')
+        parser._normalize_newlines(source)
+        text, offsets = source.text, source.offsets
+        parser._interpret_escapes(source)
+        self.assertIs(source.text, text)
+        self.assertIs(source.offsets, offsets)
 
     def test_malformed_and_invalid_escapes(self):
         for escape in (r'\x{}', r'\x{G}', r'\x{61', r'\x{0}',

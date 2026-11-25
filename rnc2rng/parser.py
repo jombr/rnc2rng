@@ -2,10 +2,12 @@ from codecs import BOM_UTF16_BE, BOM_UTF16_LE
 from urllib.request import urlopen
 from urllib.parse import urljoin, urlparse
 from bisect import bisect_right
+from array import array
 import re
 
 import rply, sys, os
 from rply.errors import LexingError
+from rply.lexer import LexerStream
 from rply.token import SourcePosition
 
 # Appendix A.2: lexical structure.
@@ -19,6 +21,7 @@ def _decode_source(data):
 # A physical newline is distinct from a character produced by an escape.
 # NUL cannot occur in an XML character, so it can represent the marker.
 NEWLINE_MARKER = '\0'
+_MAX_SHORT_OFFSET = (1 << (array('I').itemsize * 8)) - 1
 
 
 class Source(object):
@@ -31,7 +34,8 @@ class Source(object):
         first = 1 if src.startswith('\ufeff') else 0
         self.line_starts = [first] + [m.end() for m in re.finditer(r'\r\n|\r|\n', src)]
         self.text = src
-        self.offsets = list(range(len(src)))
+        offset_type = 'I' if len(src) - 1 <= _MAX_SHORT_OFFSET else 'Q'
+        self.offsets = array(offset_type, range(len(src)))
 
     def position(self, offset):
         line = bisect_right(self.line_starts, offset) - 1
@@ -52,7 +56,7 @@ def _strip_bom(source):
 
 # Appendix A.2.3: physical newline normalization.
 def _normalize_newlines(source):
-    chars, offsets = [], []
+    chars, offsets = [], array(source.offsets.typecode)
     i = 0
     while i < len(source.text):
         c = source.text[i]
@@ -77,8 +81,10 @@ def _xml_char(code):
 
 # Appendix A.2.4: escape interpretation, without rescanning replacements.
 def _interpret_escapes(source):
-    chars, offsets = [], []
     text = source.text
+    if '\\' not in text:
+        return
+    chars, offsets = [], array(source.offsets.typecode)
     i = 0
     while i < len(text):
         start = i
@@ -183,10 +189,17 @@ def lexer():
 LEXER = lexer()
 
 
+class _SourceMappedLexerStream(LexerStream):
+    def _update_pos(self, match):
+        # RPLY's line scan is quadratic here; lex() maps offsets afterward.
+        self.idx = match.end
+        return 1
+
+
 def lex(src, fn=None):
     source = _preprocess_source(src, fn)
     try:
-        for t in LEXER.lex(source.text):
+        for t in _SourceMappedLexerStream(LEXER, source.text):
             t.source_pos = source.position(source.offsets[t.source_pos.idx])
             if t.name == 'ID' and t.value in KEYWORDS:
                 t.name = t.value.upper()
