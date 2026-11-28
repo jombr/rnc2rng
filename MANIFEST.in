@@ -1,5 +1,4 @@
 include AUTHORS
 include README.rst
-include test.py
-include tests/*.rn*
+include tests/__init__.py
 recursive-include tests/golden *.rnc *.rng

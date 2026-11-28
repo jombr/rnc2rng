@@ -2,11 +2,12 @@ from setuptools import setup
 
 setup(
     name='rnc2rng',
-    version='2.8.0',
+    version='2.9.0',
     url='https://github.com/jombr/rnc2rng',
     author='David Mertz',
     description='RELAX NG Compact to regular syntax conversion library',
     long_description=open('README.rst').read(),
+    long_description_content_type='text/x-rst',
     maintainer='Joseph Bredahl',
     maintainer_email='joseph.bredahl@outlook.com',
     classifiers=[

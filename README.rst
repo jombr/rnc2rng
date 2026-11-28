@@ -59,6 +59,22 @@ Getting started
 
    $ python -m rnc2rng test.rnc > test.rng
 
+Running tests
+-------------
+
+From the repository root, run the test suite with Python's standard library:
+
+.. code-block:: shell
+
+   $ python -m unittest
+
+Alternatively, install pytest and run:
+
+.. code-block:: shell
+
+   $ python -m pip install pytest
+   $ python -m pytest
+
 License
 -------
 
