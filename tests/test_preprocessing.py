@@ -1,3 +1,5 @@
+import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -10,6 +12,52 @@ from rply.errors import LexingError
 
 
 class PreprocessingTests(unittest.TestCase):
+    def test_unexpected_end_of_input_uses_original_location(self):
+        cases = (
+            ('start = element root {', 0, 22, 'start = element root {'),
+            ('start = element root { # comment', 0, 32,
+             'start = element root { # comment'),
+            ('start = element root {\r\n  # comment\r\n', 2, 0, ''),
+            ('\ufeffstart = element root {', 0, 22, 'start = element root {'),
+            (r'start = element \x{72}oot {', 0, 27,
+             r'start = element \x{72}oot {'),
+            (r'start = element root { # a\x{A}', 0, 31,
+             r'start = element root { # a\x{A}'),
+        )
+        for src, line_number, column, line in cases:
+            with self.subTest(src=src):
+                with self.assertRaisesRegex(parser.ParseError,
+                                            'Unexpected end of input') as error:
+                    rnc2rng.loads(src)
+                self.assertEqual(error.exception.location, (None, line_number, column))
+                self.assertEqual(error.exception.line, line)
+
+    def test_unexpected_end_in_included_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            child = path / 'child.rnc'
+            child.write_bytes(b'start = element root {\r\n  # comment\r\n')
+            parent = path / 'parent.rnc'
+            parent.write_text('include "child.rnc"', encoding='utf-8')
+            with self.assertRaises(parser.ParseError) as error:
+                rnc2rng.load(str(parent))
+            self.assertEqual(error.exception.location, (str(child), 2, 0))
+            self.assertEqual(error.exception.line, '')
+            self.assertIn('Unexpected end of input', str(error.exception))
+
+    def test_cli_reports_unexpected_end_without_traceback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'example.rnc'
+            path.write_text('start = element root {', encoding='utf-8')
+            result = subprocess.run(
+                [sys.executable, '-m', 'rnc2rng', str(path)],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('[1:23]: Unexpected end of input', result.stdout)
+        self.assertIn('start = element root {\n                      ^', result.stdout)
+        self.assertNotIn('Traceback', result.stdout + result.stderr)
+
     def test_normalization_preserves_source_positions(self):
         source = parser._preprocess_source('\ufeffa\r\nb\rc\n')
         self.assertEqual(source.text, 'a\0b\0c\0')

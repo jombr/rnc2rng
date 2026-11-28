@@ -947,6 +947,12 @@ def _make_parse_error(s, t, message=None):
 
 @pg.error
 def error(s, t):
+    if t.name == '$end':
+        # RPLY's synthetic EOF token has no position; use the original
+        # source's end rather than the last token's position.
+        line = s.lines[-1]
+        raise ParseError(t, s.fn, len(s.lines) - 1, len(line),
+                         line, 'Unexpected end of input')
     raise _make_parse_error(s, t)
 
 parser = pg.build()
